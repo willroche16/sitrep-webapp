@@ -22,12 +22,24 @@ predictable:
 - **Nothing fires automatically.** Breaking News and Market Signal both
   require an explicit tap to load — opening the page or browsing between
   regions/themes doesn't cost anything by itself.
-- **Model tiering.** Compile Briefing (the main analytical output) uses
-  Claude Sonnet. Breaking News, Market Signal, and Further Reading use
-  Claude Haiku — noticeably cheaper, and plenty capable for headline/ticker
-  content.
+- **All-Haiku by default.** Every feature — Compile Briefing, Breaking News,
+  Market Signal, and Further Reading — runs on Claude Haiku, the cheapest
+  model with web search support. Worth knowing: Haiku is capable but less
+  sharp than Sonnet at nuanced synthesis, so briefings may occasionally miss
+  subtler connections a larger model would catch. If briefing quality ever
+  feels thin, the fix is switching Compile Briefing back to Sonnet — that's
+  a one-line change (`callClaudeWithSearch(prompt, 2000, "claude-sonnet-4-6")`
+  in the `generate()` function).
+- **Search count is capped.** Without a limit, Claude can decide to run as
+  many searches as it wants per call — for open-ended prompts this can spiral
+  well beyond what's needed. Every feature now caps searches per call
+  (4–6 depending on the feature), bounding worst-case cost regardless of how
+  thorough the model decides to be. This is enforced both in the app and
+  server-side in `api/generate.js`, so it holds even if the endpoint is ever
+  called directly.
 - **Set a spend limit.** In the Anthropic console under Settings → Limits,
   you can cap monthly spend so nothing runs away unexpectedly.
+
 - **Check usage.** The console's Usage page breaks down cost by model and
   by day, useful for spotting which feature is driving cost if it's higher
   than expected.
