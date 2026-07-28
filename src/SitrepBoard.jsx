@@ -197,17 +197,17 @@ function parseMarkets(text) {
   return itemsFromLines(sections.MARKETS);
 }
 
-async function callClaudeWithSearch(prompt, maxTokens = 1500, attempt = 0) {
+async function callClaudeWithSearch(prompt, maxTokens = 1500, model = "claude-sonnet-4-6", attempt = 0) {
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, maxTokens }),
+    body: JSON.stringify({ prompt, maxTokens, model }),
   });
 
   if (!response.ok) {
     if (response.status >= 500 && attempt < 1) {
       await new Promise((r) => setTimeout(r, 700 + Math.random() * 500));
-      return callClaudeWithSearch(prompt, maxTokens, attempt + 1);
+      return callClaudeWithSearch(prompt, maxTokens, model, attempt + 1);
     }
     throw new Error(`Request failed (${response.status})`);
   }
@@ -221,7 +221,7 @@ async function callClaudeWithSearch(prompt, maxTokens = 1500, attempt = 0) {
   if (!textBlocks.trim()) {
     if (attempt < 1) {
       await new Promise((r) => setTimeout(r, 700));
-      return callClaudeWithSearch(prompt, maxTokens, attempt + 1);
+      return callClaudeWithSearch(prompt, maxTokens, model, attempt + 1);
     }
     throw new Error("No content returned");
   }
@@ -333,7 +333,7 @@ Title | Show name | https://...
 If you cannot find enough real results for a category, include fewer lines rather than inventing any.`;
 
     try {
-      const { textBlocks } = await callClaudeWithSearch(prompt, 1500);
+      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001");
       const parsed = parseFurther(textBlocks);
       if (myId === furtherRequestId.current) setFurther(parsed);
     } catch (e) {
@@ -376,7 +376,7 @@ Headline text | Source name | https://...
 Include up to 8 headlines, most globally significant and most recent first. Do not invent items or sources — every headline must come from an actual search result.`;
 
     try {
-      const { textBlocks } = await callClaudeWithSearch(prompt, 1500);
+      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001");
       const parsed = parseBreaking(textBlocks);
       if (myId === breakingRequestId.current) {
         setBreakingHeadlines(parsed);
@@ -390,15 +390,9 @@ Include up to 8 headlines, most globally significant and most recent first. Do n
     }
   }
 
-  // Auto-fetch once on mount. Delayed briefly — firing a network request in the
-  // first instant after the artifact mounts can hit the host app's request bridge
-  // before it's fully ready, which is a likelier cause of a generic server error
-  // here than anything in the request itself.
-  useEffect(() => {
-    const t = setTimeout(() => generateBreaking(), 2000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // No longer auto-fetches on mount — each web-search-backed call has a real
+  // cost (the search itself, plus tokens), so this only runs when the person
+  // explicitly taps to load or refresh it.
 
   // Auto-advance through headlines
   useEffect(() => {
@@ -418,6 +412,7 @@ Include up to 8 headlines, most globally significant and most recent first. Do n
   const [marketsError, setMarketsError] = useState(null);
   const [markets, setMarkets] = useState(null);
   const [marketsFetchedAt, setMarketsFetchedAt] = useState(null);
+  const [marketsFetchedFor, setMarketsFetchedFor] = useState(null);
   const [marketsIndex, setMarketsIndex] = useState(0);
   const marketsRequestId = useRef(0);
   const marketHistoryRef = useRef({});
@@ -459,7 +454,7 @@ Market question | XX% likelihood on leading outcome | https://polymarket.com/...
 Include up to 6 markets, most relevant to the region and theme first. If you cannot find genuinely relevant active markets, leave the MARKETS block empty rather than inventing any.`;
 
     try {
-      const { textBlocks } = await callClaudeWithSearch(prompt, 1500);
+      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001");
       const parsed = parseMarkets(textBlocks);
 
       const now = Date.now();
@@ -497,6 +492,7 @@ Include up to 6 markets, most relevant to the region and theme first. If you can
       if (myId === marketsRequestId.current) {
         setMarkets(annotated);
         setMarketsFetchedAt(zulu);
+        setMarketsFetchedFor({ regionId: region.id, themeId: theme.id });
         setMarketsIndex(0);
       }
     } catch (e) {
@@ -506,15 +502,9 @@ Include up to 6 markets, most relevant to the region and theme first. If you can
     }
   }
 
-  // Auto-fetch on mount and whenever region or theme changes.
-  // Staggered slightly so it never fires in the same instant as the breaking-news
-  // fetch (which also fires on mount) — running both at once can trip the platform's
-  // per-artifact concurrency limit and surface as a generic server error.
-  useEffect(() => {
-    const t = setTimeout(() => generateMarkets(), 3200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [region.id, theme.id]);
+  // No longer auto-fetches on mount or when region/theme changes — same
+  // cost reasoning as breaking news. A stale "last loaded for X/Y" note is
+  // shown instead, with a manual refresh to pull current data on demand.
 
   // Auto-advance through markets
   useEffect(() => {
@@ -779,6 +769,12 @@ Include 4-8 sources actually used, one per line in "Name | URL" format, straight
 
         {breakingLoading && !breakingHeadlines && <div style={styles.empty}>Scanning for breaking headlines…</div>}
 
+        {!breakingLoading && !breakingHeadlines && !breakingError && (
+          <button onClick={generateBreaking} style={styles.loadPanelBtn}>
+            <Zap size={14} /> LOAD BREAKING HEADLINES
+          </button>
+        )}
+
         {breakingError && (
           <div style={styles.errorBox}>
             <TriangleAlert size={16} />
@@ -836,6 +832,16 @@ Include 4-8 sources actually used, one per line in "Name | URL" format, straight
         </div>
 
         {marketsLoading && !markets && <div style={styles.empty}>Scanning Polymarket for relevant trends…</div>}
+
+        {!marketsLoading && !markets && !marketsError && (
+          <button onClick={generateMarkets} style={styles.loadPanelBtnCyan}>
+            <RefreshCw size={14} /> LOAD MARKET SIGNAL
+          </button>
+        )}
+
+        {markets && marketsFetchedFor && (marketsFetchedFor.regionId !== region.id || marketsFetchedFor.themeId !== theme.id) && (
+          <div style={styles.staleNote}>Showing results for a previous region/theme — tap refresh to update.</div>
+        )}
 
         {marketsError && (
           <div style={styles.errorBox}>
@@ -2012,5 +2018,39 @@ const styles = {
   marketsDotDramatic: {
     background: "#F2C438",
     boxShadow: "0 0 4px rgba(242,196,56,0.8)",
+  },
+  loadPanelBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "#22292B",
+    border: "1px solid #45614F",
+    color: "#B9E0C4",
+    borderRadius: 4,
+    padding: "9px 14px",
+    fontSize: 12,
+    letterSpacing: "0.05em",
+    fontFamily: "'IBM Plex Mono', monospace",
+    cursor: "pointer",
+  },
+  loadPanelBtnCyan: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "#132A30",
+    border: "1px solid #2E93AE",
+    color: "#9FDCEC",
+    borderRadius: 4,
+    padding: "9px 14px",
+    fontSize: 12,
+    letterSpacing: "0.05em",
+    fontFamily: "'IBM Plex Mono', monospace",
+    cursor: "pointer",
+  },
+  staleNote: {
+    fontSize: 11.5,
+    color: "#6B7680",
+    fontFamily: "'IBM Plex Mono', monospace",
+    marginBottom: 8,
   },
 };

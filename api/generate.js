@@ -6,6 +6,8 @@
 // https://console.anthropic.com/settings/keys — this is billed separately
 // from any Claude.ai subscription, on a pay-per-use basis.
 
+const ALLOWED_MODELS = new Set(["claude-sonnet-4-6", "claude-haiku-4-5-20251001"]);
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -18,13 +20,14 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { prompt, maxTokens } = req.body || {};
+  const { prompt, maxTokens, model } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
     res.status(400).json({ error: "Missing 'prompt' in request body" });
     return;
   }
 
   const safeMaxTokens = Math.min(Math.max(Number(maxTokens) || 1500, 100), 4000);
+  const safeModel = ALLOWED_MODELS.has(model) ? model : "claude-sonnet-4-6";
 
   try {
     const upstream = await fetch("https://api.anthropic.com/v1/messages", {
@@ -35,7 +38,7 @@ export default async function handler(req, res) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: safeModel,
         max_tokens: safeMaxTokens,
         messages: [{ role: "user", content: prompt }],
         tools: [{ type: "web_search_20250305", name: "web_search" }],

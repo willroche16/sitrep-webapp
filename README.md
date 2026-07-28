@@ -13,6 +13,25 @@ This is billed separately, pay-per-use, from any Claude.ai/Claude Pro
 subscription — it's a different product. Usage here is modest (a handful of
 short web-search-augmented completions per session), but it isn't free.
 
+### Cost notes (read this)
+
+Every action that searches the web has a real cost: the web search itself
+(a small per-search fee) plus tokens for the response. To keep this
+predictable:
+
+- **Nothing fires automatically.** Breaking News and Market Signal both
+  require an explicit tap to load — opening the page or browsing between
+  regions/themes doesn't cost anything by itself.
+- **Model tiering.** Compile Briefing (the main analytical output) uses
+  Claude Sonnet. Breaking News, Market Signal, and Further Reading use
+  Claude Haiku — noticeably cheaper, and plenty capable for headline/ticker
+  content.
+- **Set a spend limit.** In the Anthropic console under Settings → Limits,
+  you can cap monthly spend so nothing runs away unexpectedly.
+- **Check usage.** The console's Usage page breaks down cost by model and
+  by day, useful for spotting which feature is driving cost if it's higher
+  than expected.
+
 ## Deploy it (Vercel — free tier is fine)
 
 1. Push this folder to a GitHub repo (see the commands at the bottom).
