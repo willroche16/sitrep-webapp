@@ -197,17 +197,17 @@ function parseMarkets(text) {
   return itemsFromLines(sections.MARKETS);
 }
 
-async function callClaudeWithSearch(prompt, maxTokens = 1500, model = "claude-sonnet-4-6", attempt = 0) {
+async function callClaudeWithSearch(prompt, maxTokens = 1500, model = "claude-haiku-4-5-20251001", maxSearches = 4, attempt = 0) {
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, maxTokens, model }),
+    body: JSON.stringify({ prompt, maxTokens, model, maxSearches }),
   });
 
   if (!response.ok) {
     if (response.status >= 500 && attempt < 1) {
       await new Promise((r) => setTimeout(r, 700 + Math.random() * 500));
-      return callClaudeWithSearch(prompt, maxTokens, model, attempt + 1);
+      return callClaudeWithSearch(prompt, maxTokens, model, maxSearches, attempt + 1);
     }
     throw new Error(`Request failed (${response.status})`);
   }
@@ -221,7 +221,7 @@ async function callClaudeWithSearch(prompt, maxTokens = 1500, model = "claude-so
   if (!textBlocks.trim()) {
     if (attempt < 1) {
       await new Promise((r) => setTimeout(r, 700));
-      return callClaudeWithSearch(prompt, maxTokens, model, attempt + 1);
+      return callClaudeWithSearch(prompt, maxTokens, model, maxSearches, attempt + 1);
     }
     throw new Error("No content returned");
   }
@@ -333,7 +333,7 @@ Title | Show name | https://...
 If you cannot find enough real results for a category, include fewer lines rather than inventing any.`;
 
     try {
-      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001");
+      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001", 5);
       const parsed = parseFurther(textBlocks);
       if (myId === furtherRequestId.current) setFurther(parsed);
     } catch (e) {
@@ -376,7 +376,7 @@ Headline text | Source name | https://...
 Include up to 8 headlines, most globally significant and most recent first. Do not invent items or sources — every headline must come from an actual search result.`;
 
     try {
-      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001");
+      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001", 4);
       const parsed = parseBreaking(textBlocks);
       if (myId === breakingRequestId.current) {
         setBreakingHeadlines(parsed);
@@ -454,7 +454,7 @@ Market question | XX% likelihood on leading outcome | https://polymarket.com/...
 Include up to 6 markets, most relevant to the region and theme first. If you cannot find genuinely relevant active markets, leave the MARKETS block empty rather than inventing any.`;
 
     try {
-      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001");
+      const { textBlocks } = await callClaudeWithSearch(prompt, 1500, "claude-haiku-4-5-20251001", 4);
       const parsed = parseMarkets(textBlocks);
 
       const now = Date.now();
@@ -702,7 +702,7 @@ A single flowing narrative of 280-380 words distilling the picture across the re
 Include 4-8 sources actually used, one per line in "Name | URL" format, straight after EXEC_SUMMARY. If there is genuinely little current activity in this region/theme combination, say so plainly in the narrative rather than inventing content. Do not use the "|" character anywhere except in the SOURCES lines.`;
 
     try {
-      const { textBlocks, stopReason } = await callClaudeWithSearch(prompt, 2000);
+      const { textBlocks, stopReason } = await callClaudeWithSearch(prompt, 2000, "claude-haiku-4-5-20251001", 6);
 
       const parsed = parseSitrep(textBlocks);
       if (parsed.sources.length === 0) {
